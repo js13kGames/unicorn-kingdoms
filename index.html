@@ -4,8 +4,136 @@
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>Unicorn Kingdoms</title>
     <style>
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #140f2c;
+}
+
+body {
+  color: #fff8ff;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+#game {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+#backdrop {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at 50% 10%, #533d83, #17132f 65%, #080817);
+}
+
+#app {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem;
+}
+
+#content {
+  width: min(58rem, 100%);
+  margin: auto;
+  padding: 1rem 0 2rem;
+}
+
+#hud {
+  width: min(58rem, 100%);
+  display: flex;
+  justify-content: space-between;
+  gap: .75rem;
+  flex-wrap: wrap;
+  padding: .65rem .9rem;
+  border: 1px solid #f7c8ff55;
+  border-radius: .75rem;
+  background: #241947dd;
+  box-shadow: 0 .5rem 2rem #0004;
+}
+
+#hud strong,
+h1,
+h2 {
+  color: #ffe18f;
+}
+
+#screen {
+  width: min(30rem, 100%);
+  margin: auto;
+  padding: 2rem;
+  text-align: center;
+  border: 1px solid #f4c6ff77;
+  border-radius: 1rem;
+  background: #21183de8;
+  box-shadow: 0 1rem 4rem #0007;
+}
+
+p {
+  color: #e7d9f4;
+  line-height: 1.5;
+}
+
+.hidden {
+  display: none !important;
+}
+
+.button-row {
+  display: flex;
+  gap: .6rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+button.action,
+.direction {
+  border: 1px solid #eab7ff99;
+  border-radius: .5rem;
+  padding: .65rem 1rem;
+  background: #6d398d;
+}
+
+button.action:hover,
+button.action:focus-visible,
+.direction:hover,
+.direction:focus-visible {
+  background: #a755a3;
+  outline: 2px solid #ffe18f;
+  outline-offset: 2px;
+}
+
     </style>
+  </head>
   <body>
+    <main id="game">
+      <div id="backdrop"></div>
+      <div id="app">
+        <header id="hud" class="hidden"></header>
+        <section id="content"></section>
+      </div>
+      <div id="fade"></div>
+    </main>
     <script src="main.js"></script>
   </body>
 </html>
