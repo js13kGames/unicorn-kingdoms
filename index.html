@@ -60,6 +60,11 @@ button {
   padding: 1rem 0 2rem;
 }
 
+#content h2,
+#content p {
+  margin: 0 0 0rem;
+}
+
 #hud {
   width: min(58rem, 100%);
   display: flex;
@@ -100,6 +105,7 @@ p {
 }
 
 .button-row {
+  margin-top: 1rem;
   display: flex;
   gap: .6rem;
   justify-content: center;
@@ -121,6 +127,58 @@ button.action:focus-visible,
   background: #a755a3;
   outline: 2px solid #ffe18f;
   outline-offset: 2px;
+}
+
+#map-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: .8rem;
+}
+
+#map {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(2rem, 4rem));
+  grid-auto-rows: minmax(2rem, 4rem);
+  gap: .25rem;
+  padding: .5rem;
+  border: 2px solid #f5d08a99;
+  border-radius: .8rem;
+  background: #29234dcc;
+}
+
+.tile {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  border: 1px solid #ffffff12;
+  border-radius: .35rem;
+  background: #4b4271;
+  font-size: clamp(1.2rem, 5vw, 2.2rem);
+}
+
+button.tile {
+  width: 100%;
+  padding: 0;
+}
+
+.tile.path {
+  background: #625377;
+}
+
+.tile.poi {
+  border-color: #ffe18f;
+  background: #76548c;
+}
+
+.tile.player {
+  background: #a64d9b;
+  box-shadow: 0 0 .7rem #ffe18f;
+}
+
+.tile:disabled {
+  cursor: not-allowed;
+  opacity: .65;
 }
 
     </style>
