@@ -17,3 +17,4 @@ Unicorn Kingdoms is a js13k game
 - each poi opens a gem matching minigame, requiring the player to match a specified numbe of unicorns in order to win
 - the player can match rainbows to collect them for use later in the adventure
 - generate a new kingdom after all poi's on the map have been visited and increase difficulty
+- autosave state to localStorage during play or following settings changes
