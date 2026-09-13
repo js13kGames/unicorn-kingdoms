@@ -11,6 +11,18 @@ const state = {
   kingdom: 1,
   rainbows: 0,
   totalRainbows: 0,
+  activePoi: -1,
+  activeEncounter: null,
+  selected: -1,
+  busy: false,
+  seconds: 0,
+  board: [],
+  matching: [],
+  removing: [],
+  unicornsCleared: 0,
+  rainbowsCollected: 0,
+  hint: [],
+  timer: 0,
 }
 
 const settings = {
@@ -48,10 +60,16 @@ const encounters = [
   { name: 'Traveling Trickster', icon: '🦹', target: 3 }
 ]
 
+const MATCH_SECONDS = 60,
+      BOARD_SIZE = 6,
+      gems = ['🔴', '🔵', '🟢', '🟣', '🟡', '🦄', '🌈']
+
 
 function setHud() {
   if (state.name === 'MATCH') {
-    // stub
+    const match = state.activeEncounter || pois[state.activePoi]
+    const prefix = state.activeEncounter ? '⚔️ Encounter' : '🦄 POI'
+    hud.innerHTML = `<span>${prefix}: ${match.name} · Clear <strong>${match.target} unicorns</strong></span><span>TIME <strong>${state.seconds}s</strong> · 🦄 <strong>${state.unicornsCleared}/${match.target}</strong> · 🌈 <strong>${state.rainbowsCollected}</strong></span>`
 
   } else if (state.name === 'OVERWORLD') {
     const next = nextPoi()
@@ -129,14 +147,13 @@ function showSettings() {
       id => content.querySelector('#' + id).onchange =
       content.querySelector('#' + id).oninput =
       event => {
-        const key = id.replace('-toggle','').replace('-volume','Volume')
+        const key = id === 'hint-toggle' ? 'hints' : id.replace('-toggle','').replace('-volume','Volume')
         settings[key] = id.includes('volume') ? event.target.value / 100 : event.target.checked
       }
     )
   }, 0)
 
   content.querySelector('[data-action="MENU"]').onclick = showMenu
-
   setHud()
 }
 
@@ -184,6 +201,57 @@ function isBlocked(x, y) {
   return terrain[y][x] === '🌊' || terrain[y][x] === '⛰️'
 }
 
+function newTerrain() {
+  const tiles = terrainTemplate.flat()
+ 
+  for (let i = tiles.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ; // TODO: re-check prevent j use before assignment
+    [tiles[i], tiles[j]] = [tiles[j], tiles[i]]
+  }
+ 
+  const safe = [[1, 1], [0, 1], [2, 1], [1, 0], [1, 2]]
+  safe.forEach(([x, y]) => { tiles[y * WIDTH + x] = '·' })
+ 
+  terrain = Array.from({ length: HEIGHT }, (_, y) => tiles.slice(y * WIDTH, (y + 1) * WIDTH))
+}
+
+function newKingdom() {
+  const names = [['Dawnreach', '🌅'], ['Starfall', '🌠'], ['Cloudmere', '☁️'], ['Sunspire', '☀️'], ['Dreamvale', '💫']]
+ 
+  newTerrain()
+ 
+  const pool = []
+  for (let y = 0; y < HEIGHT; y++) {
+    for (let x = 0; x < WIDTH; x++) {
+      if (!isBlocked(x, y) && (x !== 1 || y !== 1)) {
+        pool.push([x, y])
+      }
+    }
+  }
+
+  pool.sort(() => Math.random() - .5)
+  
+  const [realm, realmIcon] = names[(state.kingdom - 1) % names.length]
+  const icons = ['🌳', '🌙', '🏰']
+  const difficulty = (state.kingdom - 1) * 3
+
+  pois = [3, 6, 10].map((target, index) => ({
+    x: pool[index][0],
+    y: pool[index][1],
+    name: `${realm} ${['Grove', 'Vale', 'Citadel'][index]}`,
+    target: target + difficulty,
+    icon: index === 2 ? '🏰' : icons[index],
+    rainbows: 0
+  }))
+
+  state.completed = 0
+  state.player.x = 1
+  state.player.y = 1
+
+  return `${realmIcon} Kingdom ${state.kingdom}: ${realm} has appeared!`
+}
+
 function move(direction) {
   if (state.name !== 'OVERWORLD') return
 
@@ -193,8 +261,6 @@ function move(direction) {
     left: [-1, 0],
     right: [1, 0]
   }[direction]
-
-  console.log(`move direction: target cell ${ poiAt(state.player.x + delta[0], state.player.y + delta[1]) > -1 ? 'POI' : 'empty' }`)
 
   moveTo(`${state.player.x + delta[0]},${state.player.y + delta[1]}`)
 }
@@ -213,20 +279,429 @@ function moveTo(value) {
 
   const index = poiAt(x, y)
   if (index === state.completed) {
-    // stub: begin a progression match at index
     console.log(`START MATCH AT ${pois[index].name}`)
-    renderOverworld()
+    beginMatch(index)
 
   } else if (index < 0 && Math.random() < .18) {
-    // stub: begin an encounter match
     console.log(`START ENCOUNTER WITH ${ encounters[Math.floor(Math.random() * encounters.length)].name }`)
-    renderOverworld()
+    beginEncounter()
 
   } else {
     renderOverworld()
   }
 }
 
+function selectCell(index) {
+  if (state.name !== 'MATCH' || state.busy) return
+ 
+  resetHintTimer()
+ 
+  if (state.selected < 0) {
+    state.selected = index
+    renderMatch()
+    return
+  }
+ 
+  const a = state.selected,
+        ax = a % BOARD_SIZE,
+        ay = Math.floor(a / BOARD_SIZE),
+        bx = index % BOARD_SIZE,
+        by = Math.floor(index / BOARD_SIZE)
+ 
+  if (Math.abs(ax - bx) + Math.abs(ay - by) !== 1) {
+    state.selected = index
+    renderMatch()
+    return
+  }
+ 
+  // swap gems
+  [state.board[a], state.board[index]] = [state.board[index], state.board[a]]
+  state.selected = -1
+   
+  if (!findMatches(state.board).size) {
+    [state.board[a], state.board[index]] = [state.board[index], state.board[a]]
+   
+    if (!hasValidMove()) {
+      finishMatch(false, 'NO MOVES!')
+
+    } else {
+      renderMatch('That swap made no match. Try another pair.')
+    }
+
+    return
+  }
+
+  state.busy = true
+  renderMatch()
+  resolveBoardAnimated().then(() => {
+    if (state.name !== 'MATCH') return
+
+    state.matching = []
+    state.removing = []
+
+    const target = (state.activeEncounter || pois[state.activePoi]).target
+
+    if (state.unicornsCleared >= target) {
+      finishMatch(true)
+
+    } else {
+      state.busy = false
+      renderMatch(`Progress: ${state.unicornsCleared} / ${target} unicorns`)
+    }
+
+    if (state.name === 'MATCH' && !state.busy && !hasValidMove()) {
+      finishMatch(false, 'NO MOVES!')
+    }
+  })
+}
+
+function finishMatch(success, failure = 'MISSED!') {
+  stopTimer()
+  stopHintTimer()
+
+  state.busy = true
+  
+  // TODO: play a sound appropriate for the outcome (success or failure)
+  
+  const poi = pois[state.activePoi]
+  const encounter = state.activeEncounter
+  
+  let message = success ?
+                  encounter ? `ENCOUNTER CLEARED! ${state.rainbowsCollected} 🌈 added to your haul.`
+                            : `CLEARED! ${state.rainbowsCollected} 🌈 collected. The next POI is unlocked.`
+                        : `${failure} Try this ${encounter ? 'encounter' : 'POI'} again.`
+  
+  if (success) {
+    if (encounter) {
+      state.totalRainbows += state.rainbowsCollected
+
+    } else {
+      state.completed = Math.max(state.completed, state.activePoi + 1)
+      poi.rainbows = state.rainbowsCollected
+      state.totalRainbows += state.rainbowsCollected
+
+      if (state.completed === pois.length) {
+        state.kingdom++
+        message = newKingdom()
+      }
+    }
+
+    // TODO: save the game state to localStorage
+  }
+  
+  state.name = 'RESULT'
+  content.innerHTML = `<div id="screen" class="result-${success ? 'success' : 'failure'}">
+    <h1>${success ? '✨ CLEARED! ✨' : `💨 ${failure}`}</h1>
+    <p>${message}</p>
+  </div>`
+  
+  setTimeout(() => transitionToOverworld(message), 1200)
+}
+
+function wait(milliseconds) {
+  return new Promise(resolve => setTimeout(resolve, milliseconds))
+}
+
+async function resolveBoardAnimated() {
+  let matches
+
+  while ((matches = findMatches(state.board)).size) {
+    const indexes = [...matches]
+
+    addMatchTime(matches)
+    
+    indexes.forEach(index => {
+      if (state.board[index] === '🦄') {
+        state.unicornsCleared++
+      }
+      
+      if (state.board[index] === '🌈') {
+        state.rainbowsCollected++
+      }
+    })
+
+    state.matching = indexes
+    renderMatch(`Match! 🦄 ${state.unicornsCleared}`)
+    await wait(180)
+
+    if (state.name !== 'MATCH') return
+    state.removing = indexes
+    state.matching = []
+    renderMatch(`Clearing! 🦄 ${state.unicornsCleared}`)
+    await wait(180)
+
+    if (state.name !== 'MATCH') return
+    indexes.forEach(index => {
+      state.board[index] = null
+    })
+
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const column = []
+
+      for (let y = BOARD_SIZE - 1; y >= 0; y--) {
+        if (state.board[y * BOARD_SIZE + x]) column.push(state.board[y * BOARD_SIZE + x])
+      }
+
+      for (let y = BOARD_SIZE - 1; y >= 0; y--) {
+        state.board[y * BOARD_SIZE + x] = column[BOARD_SIZE - 1 - y] || randomGem()
+      }
+    }
+
+    state.removing = []
+    renderMatch(`Progress: ${state.unicornsCleared}`)
+    await wait(120)
+  }
+}
+
+function addMatchTime(matches) {
+  let bonus = 5
+
+  if ([...matches].some(index => state.board[index] === '🌈')) bonus = 10
+  if ([...matches].some(index => state.board[index] === '🦄')) bonus = 15
+
+  state.seconds += bonus
+}
+
+function hasValidMove() {
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const index = y * BOARD_SIZE + x
+
+      for (const other of [index + 1, index + BOARD_SIZE]) {
+        if (other >= state.board.length ||
+            (other === index + 1 && x === BOARD_SIZE - 1)) {
+          continue
+        }
+
+        const first = state.board[index]
+        state.board[index] = state.board[other]
+        state.board[other] = first
+
+        const valid = findMatches(state.board).size > 0
+
+        const second = state.board[index]
+        state.board[index] = state.board[other]
+        state.board[other] = second
+
+        if (valid) return true
+      }
+    }
+  }
+
+  return false
+}
+
+function findHint() {
+  for (let y = 0; y < BOARD_SIZE; y++) for (let x = 0; x < BOARD_SIZE; x++) {
+    const index = y * BOARD_SIZE + x;
+    
+    for (const other of [index + 1, index + BOARD_SIZE]) {
+      if (other >= state.board.length || (other === index + 1 && x === BOARD_SIZE - 1)) continue
+      
+      [state.board[index], state.board[other]] = [state.board[other], state.board[index]]
+      
+      const valid = findMatches(state.board).size > 0
+      ;
+      
+      [state.board[index], state.board[other]] = [state.board[other], state.board[index]]
+
+      if (valid) return [index, other]
+    }
+  }
+
+  return []
+}
+
+function resetHintTimer() {
+  if (state.hintTimer) clearTimeout(state.hintTimer)
+    
+  state.hintTimer = 0
+  state.hint = []
+  if (state.name === 'MATCH' && settings.hints && !state.busy) state.hintTimer = setTimeout(showHint, 15000)
+}
+
+function showHint() {
+  state.hintTimer = 0
+  if (state.name !== 'MATCH' || state.busy || !settings.hints) return
+  
+  state.hint = findHint()
+  renderMatch('Hint: try the glowing pair.')
+
+  setTimeout(() => {
+    state.hint = []
+    if (state.name === 'MATCH') renderMatch()
+    resetHintTimer()
+  }, 2200)
+}
+
+function stopHintTimer() {
+  if (state.hintTimer) clearTimeout(state.hintTimer)
+  state.hintTimer = 0
+  state.hint = []
+}
+
+
+function randomGem() {
+  return gems[Math.floor(Math.random() * gems.length)]
+}
+
+function findMatches(board) {
+  const matched = new Set()
+
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    let start = 0
+
+    for (let x = 1; x <= BOARD_SIZE; x++) {
+      if (x === BOARD_SIZE || board[y * BOARD_SIZE + x] !== board[y * BOARD_SIZE + start]) {
+        if (x - start >= 3) for (let i = start; i < x; i++) matched.add(y * BOARD_SIZE + i)
+        start = x
+      }
+    }
+  }
+  for (let x = 0; x < BOARD_SIZE; x++) {
+    let start = 0
+
+    for (let y = 1; y <= BOARD_SIZE; y++) {
+      if (y === BOARD_SIZE || board[y * BOARD_SIZE + x] !== board[start * BOARD_SIZE + x]) {
+        if (y - start >= 3) for (let i = start; i < y; i++) matched.add(i * BOARD_SIZE + x)
+        start = y
+      }
+    }
+  }
+  return matched
+}
+
+
+function renderMatch(message = '') {
+  const match = state.activeEncounter || pois[state.activePoi]
+  const prefix = state.activeEncounter ? `${match.icon} Encounter: ` : `${match.icon} `
+
+  let cells = ''
+
+  state.board.forEach((gem, index) => {
+    const hint = state.hint.includes(index) ? ' hint' : '', matching = state.matching.includes(index) ? ' matching' : '',
+    removing = state.removing.includes(index) ? ' removing' : ''
+    
+    cells += `<button class="gem${state.selected === index ? ' selected' : ''}${hint}${matching}${removing}" data-cell="${index}" ${state.busy ? 'disabled' : ''}>${gem || ''}</button>`
+  })
+
+  content.innerHTML = `<div id="match">
+    <h2>${prefix}${match.name}</h2>
+    <p>Swap adjacent gems to clear <strong>${match.target} unicorns</strong>!</p>
+    <div id="board" aria-label="Gem matching board">${cells}</div>
+    <div id="status">${message || `🦄 ${state.unicornsCleared} / ${match.target} · 🌈 ${state.rainbowsCollected} this attempt`}</div>
+    <button class="action" data-action="LEAVE-MATCH" ${state.busy ? 'disabled' : ''}>Return to Map</button>
+  </div>`
+
+  content.querySelectorAll('[data-cell]').forEach(button => button.addEventListener('click', () => {
+    selectCell(Number(button.dataset.cell))
+  }))
+
+  content.querySelector('[data-action="LEAVE-MATCH"]').addEventListener('click', () => {
+    transitionToOverworld('You left the match.')
+  })
+
+  setHud()
+}
+
+function startTimer() {
+  stopTimer()
+
+  state.timer = setInterval(() => {
+    if (state.name !== 'MATCH') return
+    
+    state.seconds--
+    setHud()
+
+    if (state.seconds <= 0) finishMatch(false)
+  }, 1000)
+}
+
+function stopTimer() {
+  if (state.timer) {
+    clearInterval(state.timer)
+    state.timer = 0
+  }
+}
+
+function transition(callback) {
+  fade.classList.add('active')
+
+  setTimeout(() => {
+    callback()
+    setTimeout(() => fade.classList.remove('active'), 40)
+  }, 240)
+}
+
+function transitionToOverworld(message) {
+  stopTimer()
+  stopHintTimer()
+
+  state.busy = true
+  
+  transition(() => {
+    state.busy = false
+    renderOverworld(message)
+    //startMusic()
+  })
+}
+
+function createCleanBoard() {
+  let board
+
+  do {
+    board = Array.from({ length: BOARD_SIZE * BOARD_SIZE }, randomGem)
+  } while (findMatches(board).size)
+  
+  return board
+}
+
+function beginMatch(index) {
+  if (state.busy || index !== state.completed) return
+
+  state.busy = true
+  state.activePoi = index
+  state.activeEncounter = null
+  state.selected = -1
+  state.matching = []
+  state.removing = []
+  state.unicornsCleared = 0
+  state.rainbowsCollected = 0
+
+  transition(() => {
+    state.board = createCleanBoard()
+    state.seconds = MATCH_SECONDS
+    state.busy = false
+    state.name = 'MATCH'
+
+    renderMatch()
+    startTimer()
+    resetHintTimer()
+  })
+}
+function beginEncounter() {
+  if (state.busy) return
+
+  state.busy = true
+  state.activePoi = -1
+  state.activeEncounter = encounters[Math.floor(Math.random() * encounters.length)]
+  state.selected = -1
+  state.matching = []
+  state.removing = []
+  state.unicornsCleared = 0
+  state.rainbowsCollected = 0
+
+  transition(() => {
+    state.board = createCleanBoard()
+    state.seconds = MATCH_SECONDS
+    state.busy = false
+    state.name = 'MATCH'
+
+    renderMatch()
+    startTimer()
+    resetHintTimer()
+  })
+}
 
 function renderOverworld(message = '') {
   state.name = 'OVERWORLD'
@@ -321,6 +796,5 @@ window.addEventListener('pointerdown', event => {
 })
 
 window.addEventListener('load', () => {
-  console.log('loaded.')
   showStart()
 })
