@@ -250,6 +250,40 @@ button.tile {
   from { transform: scale(1); }
   to { transform: scale(1.08); }
 }
+
+#fade {
+  position: fixed;
+  z-index: 5;
+  inset: 0;
+  pointer-events: none;
+  background: #080511;
+  opacity: 0;
+  transition: opacity .22s ease;
+}
+
+#fade.active {
+  opacity: 1;
+}
+
+@media (max-width: 480px) {
+  #app {
+    padding: .55rem;
+  }
+
+  #hud {
+    font-size: .82rem;
+  }
+
+  #map {
+    width: 100%;
+    grid-template-columns: repeat(7, minmax(2.2rem, 1fr));
+  }
+
+  #board {
+    width: 100%;
+    gap: .2rem;
+  }
+}
     </style>
   </head>
   <body>

@@ -152,13 +152,13 @@ function startNewGame() {
 function setHud() {
   if (state.name === 'MATCH') {
     const match = state.activeEncounter || pois[state.activePoi]
-    const prefix = state.activeEncounter ? '⚔️ Encounter' : '🦄 POI'
+    const prefix = state.activeEncounter ? '⚔️ Encounter' : '🦄 Location'
     hud.innerHTML = `<span>${prefix}: ${match.name} · Clear <strong>${match.target} unicorns</strong></span><span>TIME <strong>${state.seconds}s</strong> · 🦄 <strong>${state.unicornsCleared}/${match.target}</strong> · 🌈 <strong>${state.rainbowsCollected}</strong></span>`
 
   } else if (state.name === 'OVERWORLD') {
     const next = nextPoi()
 
-    hud.innerHTML = `<span>🗺️  Kingdom <strong>${state.kingdom}</strong> · Position: <strong>(${state.player.x}, ${state.player.y})</strong> · 🌈 Total: <strong>${state.totalRainbows}</strong></span>
+    hud.innerHTML = `<span>🗺️  Kingdom <strong>${state.kingdom}</strong> · 🌈 Total: <strong>${state.totalRainbows}</strong></span>
       <span>${next ? `Next: <strong>${next.name}</strong> (${next.target} 🦄)` : '<strong>Kingdom complete! 🎉</strong>'}</span>`
 
   } else {
@@ -190,7 +190,7 @@ function panel(title, text, buttons, className = '') {
 function showStart() {
   state.name = 'START'
 
-  panel('🦄 UNICORN KINGDOMS', 'Restore the kingdom by visiting each point of interest and collecting Unicorns.', [
+  panel('🦄 UNICORN KINGDOMS', 'Restore the kingdom by visiting each named location and collecting Unicorns.', [
     { action: 'MENU', label: 'Continue' }
   ], 'start-screen')
 
@@ -464,8 +464,8 @@ function finishMatch(success, failure = 'MISSED!') {
   
   let message = success ?
                   encounter ? `ENCOUNTER CLEARED! ${state.rainbowsCollected} 🌈 added to your haul.`
-                            : `CLEARED! ${state.rainbowsCollected} 🌈 collected. The next POI is unlocked.`
-                        : `${failure} Try this ${encounter ? 'encounter' : 'POI'} again.`
+                            : `CLEARED! ${state.rainbowsCollected} 🌈 collected. The next location is unlocked.`
+                        : `${failure} Try this ${encounter ? 'encounter' : 'location'} again.`
   
   if (success) {
     if (encounter) {
