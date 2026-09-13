@@ -120,7 +120,7 @@ function hasSave() {
   }
 }
 
-function startNewGame() {
+function startNewGame(render = true) {
   try {
     localStorage.removeItem(SAVE_KEY)
   } catch (e) {}
@@ -146,7 +146,7 @@ function startNewGame() {
     activeEncounter: null,
   })
 
-  renderOverworld()
+  if (render) renderOverworld()
 }
 
 function setHud() {
@@ -257,13 +257,24 @@ function showAbout() {
     <h2>ABOUT</h2>
     <p>Unicorn Kingdoms is a js13k 2026 entry.</p>
     <h2 style="margin-top: 1rem;">HOW TO PLAY</h2>
-    <p>TBD</p>
+    <p>Move with the arrow keys, WASD, or click neighbouring locations. Visit the glowing locations in order and clear their match-3 challenges. In a match, select two adjacent gems to swap them and make lines of three or more. Clear unicorns to complete the location; rainbows add to your haul, and matches can add time. If time runs out or there are no moves left, try again. Optional hints show an available move after a short pause.</p><br><p>Save 5 Kingdoms to beat the game!</p>
     <div class="button-row">
       <button class="action" data-action="MENU">Back to Menu</button>
     </div>
   </div>`
 
   content.querySelector('[data-action="MENU"]').addEventListener('click', showMenu)
+  setHud()
+}
+
+function showGameOver() {
+  state.name = 'GAMEOVER'
+  state.busy = false
+
+  panel('🏆 KINGDOMS SAVED!', 'You have saved the five Unicorn Kingdoms!', [
+    { action: 'RETURN-MENU', label: 'Return to Main Menu' }
+  ], 'gameover-screen')
+
   setHud()
 }
 
@@ -280,6 +291,14 @@ function handleAction(action) {
     renderOverworld()
   }
   if (action === 'CONTINUE-GAME') renderOverworld()
+  if (action === 'RETURN-MENU') {
+    try {
+      localStorage.removeItem(SAVE_KEY)
+    } catch (e) {}
+
+    startNewGame(false)
+    showMenu()
+  }
 }
 
 function nextPoi() {
@@ -478,6 +497,12 @@ function finishMatch(success, failure = 'MISSED!') {
 
       if (state.completed === pois.length) {
         state.kingdom++
+
+        if (state.kingdom > 5) {
+          showGameOver()
+          return
+        }
+
         message = newKingdom()
       }
     }
@@ -843,16 +868,20 @@ function renderOverworld(message = '') {
   const next = nextPoi()
   const records = pois.filter((poi, index) => index < state.completed).map(poi => `${poi.name}: ${poi.rainbows} 🌈`).join(' · ')
 
-  content.innerHTML = `<div id="map-wrap">
-    <h2>✨ Unicorn Kingdoms ✨</h2>
-    <p>${message || (next ? `Travel to ${next.name} ${next.icon} and clear ${next.target} unicorns.` : 'Every kingdom has been restored!')}</p>
-    <div id="map">${map}</div>
+  const addControls = false
+  const controls = addControls ? `
     <div class="controls" aria-label="Map movement">
       <button class="direction" data-move="up">▲</button>
       <button class="direction" data-move="left">◀</button>
       <button class="direction" data-move="down">▼</button>
       <button class="direction" data-move="right">▶</button>
-    </div>
+    </div>` : ''
+
+  content.innerHTML = `<div id="map-wrap">
+    <h2>✨ Unicorn Kingdoms ✨</h2>
+    <p>${message || (next ? `Travel to ${next.name} ${next.icon} and clear ${next.target} unicorns.` : 'Every kingdom has been restored!')}</p>
+    <div id="map">${map}</div>
+    ${controls}
     ${records ? `<p>Completed rainbow haul: ${records}</p>` : ''}
     <p>Use Arrow keys, WASD, or click a neighboring cell to travel.</p>
   </div>`
