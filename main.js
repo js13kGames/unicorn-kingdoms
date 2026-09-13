@@ -190,7 +190,7 @@ function panel(title, text, buttons, className = '') {
 function showStart() {
   state.name = 'START'
 
-  panel('🦄 UNICORN KINGDOMS', 'Restore the kingdom by visiting each named location and collecting Unicorns.', [
+  panel('🦄 UNICORN KINGDOMS', 'Restore the 5 Kingdoms by visiting each named location, saving Unicorns and collecting rainbows.', [
     { action: 'MENU', label: 'Continue' }
   ], 'start-screen')
 
