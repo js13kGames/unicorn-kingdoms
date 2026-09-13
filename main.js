@@ -4,6 +4,8 @@ const content = document.getElementById('content')
 const hud = document.getElementById('hud')
 const fade = document.getElementById('fade')
 
+const SAVE_KEY = 'unicorn-kingdoms'
+
 const state = {
   name: 'START',
   player: { x: 0, y: 0 },
@@ -64,6 +66,84 @@ const MATCH_SECONDS = 60,
       BOARD_SIZE = 6,
       gems = ['🔴', '🔵', '🟢', '🟣', '🟡', '🦄', '🌈']
 
+function saveGame() {
+  try {
+    localStorage.setItem(SAVE_KEY, JSON.stringify({
+      version: 1,
+      state: {
+        player: state.player,
+        completed: state.completed,
+        totalRainbows: state.totalRainbows,
+        kingdom: state.kingdom,
+      },
+      terrain,
+      pois,
+      settings,
+    }))
+
+  } catch (_) {}
+}
+
+function loadGame() {
+  try {
+    const save = JSON.parse(localStorage.getItem(SAVE_KEY))
+    if (!save || save.version !== 1) return
+    
+    Object.assign(state, save.state || {})
+    
+    if (save.terrain) terrain = save.terrain
+    if (save.pois) pois = save.pois
+
+    Object.assign(settings, save.settings || {})
+  } catch (e) {}
+}
+
+function resetGame() {
+  try {
+    localStorage.removeItem(SAVE_KEY)
+  } catch (e) {}
+
+  location.reload()
+}
+
+function hasSave() {
+  try {
+    const save = JSON.parse(localStorage.getItem(SAVE_KEY))
+    return !!(save && save.version === 1)
+
+  } catch (e) {
+    return false
+  }
+}
+
+function startNewGame() {
+  try {
+    localStorage.removeItem(SAVE_KEY)
+  } catch (e) {}
+  
+  terrain = terrainTemplate.map(row => row.slice())
+
+  pois = [
+    { x: 2, y: 1, name: 'Whispering Woods', target: 3, icon: '🌳', rainbows: 0 },
+    { x: 5, y: 3, name: 'Moonlit Vale', target: 6, icon: '🌙', rainbows: 0 },
+    { x: 2, y: 5, name: 'Unicorn Citadel', target: 10, icon: '🏰', rainbows: 0 },
+  ]
+
+  Object.assign(state, {
+    player: { x: 1, y: 1 },
+    completed: 0,
+    totalRainbows: 0,
+    kingdom: 1,
+    board: [],
+    selected: -1,
+    matching: [],
+    removing: [],
+    activePoi: -1,
+    activeEncounter: null,
+  })
+
+  renderOverworld()
+}
 
 function setHud() {
   if (state.name === 'MATCH') {
@@ -118,9 +198,14 @@ function showMenu() {
   
   const buttons = [
     { action: 'START-GAME', label: 'Start Game' },
+  ]
+
+  if (hasSave()) buttons.push({ action: 'CONTINUE-GAME', label: 'Continue Game' })
+
+  buttons.push(
     { action: 'ABOUT', label: 'About' },
     { action: 'SETTINGS', label: 'Settings' },
-  ]
+  )
 
   
   panel('🦄 UNICORN KINGDOMS', 'Choose your adventure and save the Kingdoms!', buttons, 'menu-screen')
@@ -139,6 +224,7 @@ function showSettings() {
     <p><label><input id="music-toggle" type="checkbox" ${settings.music ? 'checked' : ''}> Music</label><input id="music-volume" type="range" min="0" max="100" value="${settings.musicVolume * 100}"></p>
     <div class="button-row">
       <button class="action" data-action="MENU">Back to Menu</button>
+      <button class="action" data-action="CLEAR-SAVE">Clear Save Data</button>
     </div>
   </div>`
   
@@ -149,11 +235,13 @@ function showSettings() {
       event => {
         const key = id === 'hint-toggle' ? 'hints' : id.replace('-toggle','').replace('-volume','Volume')
         settings[key] = id.includes('volume') ? event.target.value / 100 : event.target.checked
+        saveGame()
       }
     )
   }, 0)
 
   content.querySelector('[data-action="MENU"]').onclick = showMenu
+  content.querySelector('[data-action="CLEAR-SAVE"]').onclick = resetGame
   setHud()
 }
 
@@ -187,6 +275,7 @@ function handleAction(action) {
     state.rainbows = 0
     renderOverworld()
   }
+  if (action === 'CONTINUE-GAME') renderOverworld()
 }
 
 function nextPoi() {
@@ -275,7 +364,7 @@ function moveTo(value) {
   state.player.x = x
   state.player.y = y
 
-  // TODO: save game state to localStorage
+  saveGame()
 
   const index = poiAt(x, y)
   if (index === state.completed) {
@@ -386,7 +475,7 @@ function finishMatch(success, failure = 'MISSED!') {
       }
     }
 
-    // TODO: save the game state to localStorage
+    saveGame()
   }
   
   state.name = 'RESULT'
@@ -492,20 +581,22 @@ function hasValidMove() {
 }
 
 function findHint() {
-  for (let y = 0; y < BOARD_SIZE; y++) for (let x = 0; x < BOARD_SIZE; x++) {
-    const index = y * BOARD_SIZE + x;
-    
-    for (const other of [index + 1, index + BOARD_SIZE]) {
-      if (other >= state.board.length || (other === index + 1 && x === BOARD_SIZE - 1)) continue
+  for (let y = 0; y < BOARD_SIZE; y++) {
+    for (let x = 0; x < BOARD_SIZE; x++) {
+      const index = y * BOARD_SIZE + x;
       
-      [state.board[index], state.board[other]] = [state.board[other], state.board[index]]
-      
-      const valid = findMatches(state.board).size > 0
-      ;
-      
-      [state.board[index], state.board[other]] = [state.board[other], state.board[index]]
+      for (const other of [index + 1, index + BOARD_SIZE]) {
+        if (other >= state.board.length || (other === index + 1 && x === BOARD_SIZE - 1)) continue
+        
+        [state.board[index], state.board[other]] = [state.board[other], state.board[index]]
+        
+        const valid = findMatches(state.board).size > 0
+        ;
+        
+        [state.board[index], state.board[other]] = [state.board[other], state.board[index]]
 
-      if (valid) return [index, other]
+        if (valid) return [index, other]
+      }
     }
   }
 
@@ -514,9 +605,9 @@ function findHint() {
 
 function resetHintTimer() {
   if (state.hintTimer) clearTimeout(state.hintTimer)
-    
   state.hintTimer = 0
   state.hint = []
+
   if (state.name === 'MATCH' && settings.hints && !state.busy) state.hintTimer = setTimeout(showHint, 15000)
 }
 
@@ -796,5 +887,6 @@ window.addEventListener('pointerdown', event => {
 })
 
 window.addEventListener('load', () => {
+  loadGame()
   showStart()
 })
