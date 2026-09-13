@@ -66,6 +66,10 @@ const MATCH_SECONDS = 60,
       BOARD_SIZE = 6,
       gems = ['🔴', '🔵', '🟢', '🟣', '🟡', '🦄', '🌈']
 
+let audio,
+    musicTimer = 0,
+    musicStep = 0
+
 function saveGame() {
   try {
     localStorage.setItem(SAVE_KEY, JSON.stringify({
@@ -179,7 +183,7 @@ function panel(title, text, buttons, className = '') {
     </div>`
 
   content.querySelectorAll('[data-action]').forEach(button => {
-    button.addEventListener('click', () => handleAction(button.dataset.action))
+    button.addEventListener('click', () => { wakeAudio(); sound('click'); handleAction(button.dataset.action) })
   })
 }
 
@@ -352,6 +356,8 @@ function move(direction) {
   }[direction]
 
   moveTo(`${state.player.x + delta[0]},${state.player.y + delta[1]}`)
+  wakeAudio()
+  sound('click')
 }
 
 function moveTo(value) {
@@ -447,10 +453,11 @@ function selectCell(index) {
 function finishMatch(success, failure = 'MISSED!') {
   stopTimer()
   stopHintTimer()
+  stopMusic()
 
   state.busy = true
   
-  // TODO: play a sound appropriate for the outcome (success or failure)
+  sound(success ? 'success' : 'failure')
   
   const poi = pois[state.activePoi]
   const encounter = state.activeEncounter
@@ -498,6 +505,7 @@ async function resolveBoardAnimated() {
     const indexes = [...matches]
 
     addMatchTime(matches)
+    sound(indexes.some(index => state.board[index] === '🦄') ? 'unicorn' : indexes.some(index => state.board[index] === '🌈') ? 'rainbow' : 'match')
     
     indexes.forEach(index => {
       if (state.board[index] === '🦄') {
@@ -685,10 +693,14 @@ function renderMatch(message = '') {
   </div>`
 
   content.querySelectorAll('[data-cell]').forEach(button => button.addEventListener('click', () => {
+    wakeAudio()
+    sound('click')
     selectCell(Number(button.dataset.cell))
   }))
 
   content.querySelector('[data-action="LEAVE-MATCH"]').addEventListener('click', () => {
+    wakeAudio()
+    sound('click')
     transitionToOverworld('You left the match.')
   })
 
@@ -772,7 +784,9 @@ function beginMatch(index) {
 }
 function beginEncounter() {
   if (state.busy) return
-
+  wakeAudio()
+  sound('encounter')
+  
   state.busy = true
   state.activePoi = -1
   state.activeEncounter = encounters[Math.floor(Math.random() * encounters.length)]
@@ -844,15 +858,94 @@ function renderOverworld(message = '') {
   </div>`
 
   content.querySelectorAll('[data-move]').forEach(button => button.addEventListener('click', () => {
+    wakeAudio()
+    sound('click')
     move(button.dataset.move)
   }))
 
   content.querySelectorAll('[data-cell]').forEach(button => button.addEventListener('click', () => {
+    wakeAudio()
+    sound('click')
     moveTo(button.dataset.cell)
   }))
 
   setHud()
 }
+
+function wakeAudio() {
+  if (!audio) {
+    const Audio = window.AudioContext || window.webkitAudioContext
+    if (Audio) audio = new Audio()
+  }
+
+  if (audio && audio.state === 'suspended') {
+    audio.resume()
+  }
+
+  if (audio && !musicTimer) {
+    startMusic()
+  }
+}
+
+function tone(frequency, length = .08, delay = 0, wave = 'sine', volume = .035) {
+  if (!audio) return
+
+  const start = audio.currentTime + delay,
+        oscillator = audio.createOscillator(),
+        gain = audio.createGain()
+
+  oscillator.type = wave
+  oscillator.frequency.value = frequency
+  
+  gain.gain.setValueAtTime(volume, start)
+  gain.gain.exponentialRampToValueAtTime(.001, start + length)
+
+  oscillator.connect(gain).connect(audio.destination)
+  
+  oscillator.start(start)
+  oscillator.stop(start + length)
+}
+
+function sound(kind) {
+  if (!audio || !settings.sound) return
+
+  const notes = {
+    click: [[440, .05]], select: [[620, .06]],
+    swap: [[260, .06], [390, .07, .05]],
+    match: [[330, .08], [494, .1, .06]],
+    rainbow: [[523, .1], [784, .12, .07]],
+    unicorn: [[392, .1], [659, .12, .07], [988, .16, .14]],
+    encounter: [[180, .12], [240, .14, .1]],
+    success: [[523, .12], [659, .12, .1], [784, .2, .2]],
+    failure: [[260, .15], [180, .2, .12]],
+  }[kind]
+  
+  if (notes) {
+    notes.forEach(note => {
+      tone(note[0], note[1], note[2], kind === 'failure' ? 'sawtooth' : 'sine', (kind === 'success' ? .045 : .035) * settings.soundVolume)
+    })
+  }
+}
+
+function startMusic() {
+  if (!audio || musicTimer) return;
+
+  const notes = [196, 247, 294, 247, 220, 262, 330, 262];
+
+  musicTimer = setInterval(() => {
+    if (state.name !== 'RESULT' && settings.music) {
+      tone(notes[musicStep++ % notes.length], .24, 0, 'triangle', .012 * settings.musicVolume)
+    }
+  }, 700)
+}
+
+function stopMusic() {
+  if (musicTimer) {
+    clearInterval(musicTimer)
+    musicTimer = 0
+  }
+}
+
 
 window.addEventListener('keydown', event => {
   if (state.name === 'START') {
